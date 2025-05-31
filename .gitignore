@@ -20,5 +20,9 @@ __pycache__/
 **.terraform.lock*
 **terraform.tfstate*
 
+logs/
+airflow.cfg
+unittests.cfg
+webserver_config.py
 
 .DS_Store
