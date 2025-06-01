@@ -23,4 +23,4 @@ def check_dag():
     
     create_file() >> check_file() >> read_file()
 
-my_dag()
+check_dag()
