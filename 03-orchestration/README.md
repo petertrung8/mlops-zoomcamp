@@ -21,14 +21,33 @@ mkdir -p ./dags ./logs ./plugins ./config
 echo -e "AIRFLOW_UID=$(id -u)" > .env
 ```
 
-Afterwards you can edit the .env file to add Airflow, Postgres and pgadmin. Example how the file will look like is in `.env.example`.
+Afterwards you will need to edit the .env file to add Airflow, Postgres and pgadmin. Example how the file will look like is in `.env.example`, but you will add these following lines to the file, examples:
+
+```
+# Airflow configuration
+AIRFLOW_WWW_USER_USERNAME=airflow
+AIRFLOW_WWW_USER_PASSWORD=airflow
+
+# PostgreSQL service setup
+POSTGRES_PASSWORD=airflow
+POSTGRES_USER=airflow
+POSTGRES_DB=airflow
+
+# pgAdmin service setup, it is used for visaulize the database
+ENABLE_PGADMIN=true             # left empty to disable pgadmin view
+COMPOSE_PROFILES=${ENABLE_PGADMIN:+pgadmin}
+PGADMIN_DEFAULT_EMAIL=admin@admin.com
+PGADMIN_DEFAULT_PASSWORD=admin
+```
 
 ### 3.Launch services
 
 To build the image of Airflow, run the following command
+
 ```
 docker compose up -d
-````
+```
+
 **Note**: The current `docker-compose.yaml` uses build option to also install custom dependencies in the `requirements.txt` file.
 
 ### 4. Access the UIs
@@ -44,10 +63,10 @@ docker compose up -d
 
 ## 📦 Project Structure
 
-```shell
+```
 .
 ├── docker-compose.yaml     # Main Compose configuration
-├── .env.example          # Template for environment variables
+├── .env.example            # Template for environment variables
 ├── dags/                   # Your Airflow DAG definitions
 ├── logs/                   # Airflow scheduler & task logs
 ├── config/                 # airflow.cfg and custom configs
@@ -58,9 +77,9 @@ docker compose up -d
 ## ⚙️ Configuration
 ### 1. Environment Variables
 
-Edit `.env.template` to suit your environment, then run `start_docker.sh`:
+Use `.env.example` to suit your environment:
 
-* **AIRFLOW_UID** — Host user/group IDs for proper file ownership
+* **AIRFLOW_UID** — Host user ID for proper file ownership
 
 * **AIRFLOW_WWW_USER_USERNAME** / **PASSWORD** — Web UI credentials
 
@@ -71,15 +90,15 @@ Edit `.env.template` to suit your environment, then run `start_docker.sh`:
 
 ### 2. Compose Profiles
 
-* default: Airflow + PostgreSQL
-
-* pgadmin: Add --profile pgadmin to enable pgAdmin service
+* Airflow
+* PostgreSQL
+* pgadmin
 
 ## 🛠️ Services
 | Service                   | Description                                               |
 | ------------------------- | --------------------------------------------------------- |
 | **postgres**              | PostgreSQL metadata database                              |
-| **pgadmin**               | Web UI for PostgreSQL (enabled via `pgadmin` profile)     |
+| **pgadmin**               | Web UI for PostgreSQL                                     |
 | **airflow-init**          | Initializes directories, permissions, and default configs |
 | **airflow-scheduler**     | Schedules and triggers task execution                     |
 | **airflow-apiserver**     | Exposes Airflow’s REST API and web UI                     |
