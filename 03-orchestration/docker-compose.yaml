@@ -43,6 +43,8 @@ services:
       POSTGRES_USER: "${POSTGRES_USER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_DB: "${POSTGRES_DB}"
+    ports:
+      - 5432:5432
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
@@ -51,50 +53,7 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-
-  postgres-mlflow:
-      image: postgres:13
-      environment:
-        POSTGRES_USER: mlflow
-        POSTGRES_PASSWORD: mlflow
-        POSTGRES_DB: mlflow
-      volumes:
-        # The data folder is a named volume mounted to /var/lib/postgresql/data
-        - postgres-db-volume-mlflow:/var/lib/postgresql/data
   
-  minio:
-    image: minio/minio
-    expose:
-      - "9000"
-    ports:
-      - "9000:9000"
-      # MinIO Console is available at http://localhost:9001
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    healthcheck:
-      test: timeout 5s bash -c ':> /dev/tcp/127.0.0.1/9000' || exit 1
-      interval: 1s
-      timeout: 10s
-      retries: 5
-    command: server /data --console-address ":9001"
-  # Create a bucket named "bucket" if it doesn't exist
-  minio-create-bucket:
-    image: minio/mc
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      bash -c "
-      mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
-      if ! mc ls minio/bucket; then
-        mc mb minio/bucket
-      else
-        echo 'bucket already exists'
-      fi
-      "
-
   pgadmin:
     image: dpage/pgadmin4
     profiles: ["pgadmin"]
@@ -105,45 +64,6 @@ services:
       - 5050:80
     depends_on:
       - postgres
-  
-  artifacts-server:
-    build: ./dockerfiles/mlflow
-    restart: always
-    depends_on:
-      - minio-create-bucket
-    expose:
-      - "5500"
-    ports:
-      - "5500:5500"
-    environment:
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5500
-      --artifacts-destination s3://bucket
-      --gunicorn-opts "--log-level debug"
-      --artifacts-only
-
-  tracking-server:
-    build: ./dockerfiles/mlflow
-    restart: always
-    depends_on:
-      - postgres-mlflow
-      - artifacts-server
-    expose:
-      - "5000"
-    ports:
-      - "5000:5000"
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5000
-      --backend-store-uri postgresql://mlflow:mlflow@postgres-mlflow/mlflow
-      --default-artifact-root http://artifacts-server:5500/api/2.0/mlflow-artifacts/artifacts/experiments
-      --gunicorn-opts "--log-level debug"
 
   airflow-apiserver:
     <<: *airflow-common
@@ -312,6 +232,94 @@ services:
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
+  
+  # ---------------------------------------------------------------------------
+  # MLFLOW
+  # ---------------------------------------------------------------------------
+
+  postgres-mlflow:
+      image: postgres:13
+      environment:
+        POSTGRES_USER: mlflow
+        POSTGRES_PASSWORD: mlflow
+        POSTGRES_DB: mlflow
+      ports:
+        - 5433:5432
+      volumes:
+        # The data folder is a named volume mounted to /var/lib/postgresql/data
+        - postgres-db-volume-mlflow:/var/lib/postgresql/data
+  
+  minio:
+    image: minio/minio
+    expose:
+      - "9000"
+    ports:
+      - "9000:9000"
+      # MinIO Console is available at http://localhost:9001
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    healthcheck:
+      test: timeout 5s bash -c ':> /dev/tcp/127.0.0.1/9000' || exit 1
+      interval: 1s
+      timeout: 10s
+      retries: 5
+    command: server /data --console-address ":9001"
+  # Create a bucket named "bucket" if it doesn't exist
+  minio-create-bucket:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      bash -c "
+      mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+      if ! mc ls minio/bucket; then
+        mc mb minio/bucket
+      else
+        echo 'bucket already exists'
+      fi
+      "
+  
+  artifacts-server:
+    build: ./dockerfiles/mlflow
+    restart: always
+    depends_on:
+      - minio-create-bucket
+    expose:
+      - "5500"
+    ports:
+      - "5500:5500"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5500
+      --artifacts-destination s3://bucket
+      --gunicorn-opts "--log-level debug"
+    # --artifacts-only
+
+  tracking-server:
+    build: ./dockerfiles/mlflow
+    restart: always
+    depends_on:
+      - postgres-mlflow
+      - artifacts-server
+    expose:
+      - "5000"
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://mlflow:mlflow@postgres-mlflow/mlflow
+      --default-artifact-root http://artifacts-server:5500/api/2.0/mlflow-artifacts/artifacts/experiments
+      --gunicorn-opts "--log-level debug"
 
 volumes:
   postgres-db-volume:

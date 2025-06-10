@@ -7,3 +7,4 @@ hyperopt
 xgboost
 psycopg2-binary
 boto3
+python-dateutil
